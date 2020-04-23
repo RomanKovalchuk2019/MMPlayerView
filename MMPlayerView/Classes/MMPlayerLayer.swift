@@ -261,9 +261,9 @@ public class MMPlayerLayer: AVPlayerLayer {
     // MARK: - Private Parameter
     lazy var subtitleView = MMSubtitleView()
     lazy var shrinkControl = {
-       return MMPlayerShrinkControl(mmPlayerLayer: self)
+        return MMPlayerShrinkControl(mmPlayerLayer: self)
     }()
-
+    
     private lazy var  bgView: UIView = {
         let v = UIView()
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -275,7 +275,7 @@ public class MMPlayerLayer: AVPlayerLayer {
         v.backgroundColor = UIColor.clear
         return v
     }()
-   
+    
     private lazy var tapGesture: UITapGestureRecognizer = {
         let g = UITapGestureRecognizer(target: self, action: #selector(MMPlayerLayer.touchAction(gesture:)))
         return g
@@ -317,7 +317,7 @@ public class MMPlayerLayer: AVPlayerLayer {
         "duration",
         "playable",
         "hasProtectedContent",
-        ]
+    ]
     
     // MARK: - Init
     public override init(layer: Any) {
@@ -487,20 +487,20 @@ extension MMPlayerLayer {
                             var error: NSError?
                             let _ =  a.statusOfValue(forKey: key, error: &error)
                             if let e = error {
-                            self?.currentPlayStatus = .failed(err: e.localizedDescription)
-                            return
+                                self?.currentPlayStatus = .failed(err: e.localizedDescription)
+                                return
+                            }
                         }
-                    }
-                    
-                    let item = MMPlayerItem(asset: a, delegate: self)
-                    switch self?.cacheType {
-                    case .some(.memory(let count)):
-                        self?.cahce.cacheCount = count
-                        self?.cahce.appendCache(key: current.url, item: item)
-                    default:
-                        self?.cahce.removeAll()
-                    }
-                    self?.player?.replaceCurrentItem(with: item)
+                        
+                        let item = MMPlayerItem(asset: a, delegate: self)
+                        switch self?.cacheType {
+                        case .some(.memory(let count)):
+                            self?.cahce.cacheCount = count
+                            self?.cahce.appendCache(key: current.url, item: item)
+                        default:
+                            self?.cahce.removeAll()
+                        }
+                        self?.player?.replaceCurrentItem(with: item)
                     }
                 }
             }
@@ -550,6 +550,7 @@ extension MMPlayerLayer {
 extension MMPlayerLayer {
     private func setup() {
         self.player = AVPlayer()
+        self.player?.automaticallyWaitsToMinimizeStalling = true
         self.backgroundColor = UIColor.black.cgColor
         self.progressType = .default
         self.addPlayerObserver()
@@ -579,7 +580,7 @@ extension MMPlayerLayer {
             self.coverView?.frame = vRect
         }
         if bgView.bounds == self.frame { return }
-
+        
         self.frame = bgView.bounds
     }
     
@@ -609,12 +610,12 @@ extension MMPlayerLayer {
                         srt.search(duration: sec, completed: { [weak self] (info) in
                             guard let self = self else {return}
                             self.subtitleView.update(infos: info, setting: self.subtitleSetting)
-                        }, queue: DispatchQueue.main)
+                            }, queue: DispatchQueue.main)
                     default:
                         break
                     }
                 }
-            
+                
                 if let cover = self?.coverView, cover.responds(to: #selector(cover.timerObserver(time:))) {
                     cover.timerObserver!(time: time)
                 }
@@ -622,35 +623,41 @@ extension MMPlayerLayer {
         }
         
         NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: nil, using: { [weak self] (nitification) in
-            switch self?.currentPlayStatus ?? .unknown {
-            case .pause:
-                self?.isBackgroundPause = true
-            default:
-                self?.isBackgroundPause = false
+            DispatchQueue.main.async {
+                switch self?.currentPlayStatus ?? .unknown {
+                case .pause:
+                    self?.isBackgroundPause = true
+                default:
+                    self?.isBackgroundPause = false
+                }
+                self?.player?.pause()
             }
-            self?.player?.pause()
         })
         
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil, using: { [weak self] (nitification) in
-            if self?.isBackgroundPause == false {
-                self?.player?.play()
+            DispatchQueue.main.async {
+                if self?.isBackgroundPause == false {
+                    self?.player?.play()
+                }
+                self?.isBackgroundPause = false
             }
-            self?.isBackgroundPause = false
         })
         
         NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: nil, using: { [weak self] (_) in
-          
-            if self?.repeatWhenEnd == true {
-                self?.player?.seek(to: CMTime.zero)
-                self?.player?.play()
-            } else if let s = self?.currentPlayStatus {
-                switch s {
-                case .playing, .pause:
-                    if let u = self?.asset?.url {
-                        self?.cahce.removeCache(key: u)
+            DispatchQueue.main.async {
+                
+                if self?.repeatWhenEnd == true {
+                    self?.player?.seek(to: CMTime.zero)
+                    self?.player?.play()
+                } else if let s = self?.currentPlayStatus {
+                    switch s {
+                    case .playing, .pause:
+                        if let u = self?.asset?.url {
+                            self?.cahce.removeCache(key: u)
+                        }
+                        self?.currentPlayStatus = .end
+                    default: break
                     }
-                    self?.currentPlayStatus = .end
-                default: break
                 }
             }
         })
@@ -667,7 +674,7 @@ extension MMPlayerLayer {
         case "videoRect", "frame", "bounds":
             let new = change?[.newKey] as? CGRect ?? .zero
             let old = change?[.oldKey] as? CGRect ?? .zero
-         if new != old {
+            if new != old {
                 self.updateCoverConstraint()
             }
         case "muted":
@@ -690,7 +697,7 @@ extension MMPlayerLayer {
                 }
             default: break
             }
-
+            
         default:
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
         }
@@ -711,7 +718,7 @@ extension MMPlayerLayer {
             timeObserver = nil
         }
     }
-
+    
     private func convertItemStatus() -> MMPlayerLayer.PlayStatus {
         if let item = self.player?.currentItem {
             switch item.status {
@@ -788,9 +795,7 @@ extension MMPlayerLayer: MMPlayerItemProtocol {
     }
     
     func isPlaybackKeepUp(isKeepUp: Bool) {
-        if isKeepUp == true {
-            self.startLoading(isStart: false)
-        }
+        self.startLoading(isStart: !isKeepUp)
     }
     
     func isPlaybackEmpty(isEmpty: Bool) {
@@ -804,7 +809,7 @@ extension MMPlayerLayer: MMSubtitleSettingProtocol {
     public func setting(_ mmsubtitleSetting: MMSubtitleSetting, fontChange: UIFont) {
     }
     public func setting(_ mmsubtitleSetting: MMSubtitleSetting, textColorChange: UIColor) {
-
+        
     }
     public func setting(_ mmsubtitleSetting: MMSubtitleSetting, labelEdgeChange: (bottom: CGFloat, left: CGFloat, right: CGFloat)) {
         
